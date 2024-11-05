@@ -30,10 +30,14 @@ ui <- fluidPage(
                      "x Variable",
                      choices = names(numeric_my_sample)[-1], 
                      selected = names(numeric_my_sample)[2]),
+      sliderInput("bins", "Number of bins:",
+                  min = 1, max = 50, value = c(1,2)),
       selectizeInput("corr_y",
                      "y Variable",
                      choices = names(numeric_my_sample)[-2],
-                     selected = names(numeric_my_sample)[1]),                  
+                     selected = names(numeric_my_sample)[1]),
+      sliderInput("bins2", "Number of bins:",
+                  min = 1, max = 50, value = c(1,2)),
       h2("Choose the categorical subset of the data:"),
       radioButtons("hhl_seasons",
                    "Seasons",
@@ -72,18 +76,17 @@ ui <- fluidPage(
                                    "No"
                    )
       ),
-      h2("Select a Sample Size"),
-      sliderInput("corr_n", "", min = 20, max = 500, value = 20),
-      actionButton("corr_sample","Get a Sample!")
     ),
     mainPanel(
       tabsetPanel(id="tabs",
       tabPanel("About",textOutput("about"),
       uiOutput("url"),
+      textOutput("about2"),
       imageOutput("bike")),
       tabPanel("Data Download",
                DT::dataTableOutput("mytable"),downloadButton("downloadData", "Download")),
-      tabPanel("Data Exploration",plotOutput("corr_scatter")),
+      tabPanel("Data Exploration",plotOutput("corr_scatter"),
+               actionButton("corr_sample","Get a Sample!")),
       conditionalPanel("input.corr_sample",
                        h2("Guess the correlation!"),
                        column(6, 
@@ -95,7 +98,7 @@ ui <- fluidPage(
                               )
                        ),
                        column(6, 
-                              actionButton("corr_submit", "Check Your Guess!"))
+                              actionButton("corr_submit", "Subset"))
       )
     )
   )
@@ -106,10 +109,19 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
   output$about <- renderText({
-    "This app was created to explore the Seoul Bike Sharing Demand Prediction data set."
+    "This app was created to explore the Seoul Bike Sharing Demand Prediction data set. The data, from Kaggle,
+    was collected in order to try to predict how weather affects the number of bikes used by a bike sharing 
+    company in Seoul, South Korea. The data set has 14 variables, containing the number of bikes rented during a 
+    particular hour on a particular day and information on the weather at the time and other circumstances. The 
+    link to the source of the data is below."
   })
+
   output$url<-renderUI({
     tagList("",a("Seoul Bike Sharing Data", href="https://www.kaggle.com/datasets/saurabhshahane/seoul-bike-sharing-demand-prediction/data") )
+  })
+  output$about2 <- renderText({
+    "In this app, a user can explore associations between numeric variables, subset the data by categorical
+    and numeric variables, and download the subsetted data."
   })
   output$bike<-renderImage({ 
     filename <- normalizePath(file.path('./images','Bike.png'))
@@ -119,7 +131,6 @@ server <- function(input, output, session) {
          alt = "")
   }, deleteFile = FALSE)
   
-  ready<-
   
   output$mytable <- DT::renderDataTable({
     DT::datatable(my_sample|>
@@ -138,6 +149,20 @@ server <- function(input, output, session) {
                          `Functioning Day` == input$fs_func), file, row.names = FALSE)
     }
   )
+  
+  observe({
+    updateSliderInput(session, "bins", max = max(numeric_my_sample|>select(input$corr_x)),
+                      min = min(numeric_my_sample|>select(input$corr_x)),
+                      value = c(min(numeric_my_sample|>select(input$corr_x)),max(numeric_my_sample|>select(input$corr_x))))
+  })
+  observe({
+    updateSliderInput(session, "bins2", max = max(numeric_my_sample|>select(input$corr_y)),
+                      min = min(numeric_my_sample|>select(input$corr_y)),
+                      value = c(min(numeric_my_sample|>select(input$corr_y)),max(numeric_my_sample|>select(input$corr_y))))
+  })
+  
+  
+  
   
   
   #################################################3
