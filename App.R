@@ -10,7 +10,10 @@ my_sample_initial<-read_csv("Seoul_Bike_Data.csv")
 my_sample<-my_sample_initial|>
   mutate(month=str_split_i(Date,'/',2),
          month=as.numeric(month),day=str_split_i(Date,'/',1),
-         day=as.numeric(day))
+         day=as.numeric(day))|>
+  mutate(Seasonsnum=ifelse(Seasons=='Summer',1,ifelse(Seasons=='Autumn',2,ifelse(Seasons=='Winter', 3, 4))),
+         Holidaynum=ifelse(Holiday=='No Holiday', 1, 0),
+         `Functioning Day num`=ifelse(`Functioning Day`=='Yes',1,0))
 
 numeric_vars<-c("Rented Bike Count", "Temperature(°C)", "Humidity(%)", "Wind speed (m/s)", "Visibility (10m)",
                 "Dew point temperature(°C)", "Solar Radiation (MJ/m2)", "Rainfall(mm)", "Snowfall (cm)")
@@ -20,6 +23,28 @@ numeric_my_sample<-my_sample|>
 categorical_my_sample<-my_sample|>
   select(Hour, Seasons, `Functioning Day`, Holiday, month)
 # Read in data
+
+Seasonsvals <- c(
+  "1" = "Summer",
+  "2" = "Autumn",
+  "3" = "Winter",
+  "4" = "Spring")
+
+Holidayvals<-c("1"="No Holiday", '0'="Holiday")
+
+Funcvals<-c("1" = "Yes", "2" = "No")
+
+
+
+
+
+
+
+
+
+
+
+
 ui <- fluidPage(
   
   titlePanel("Seoul Bike Sharing Exploration"),
@@ -41,13 +66,13 @@ ui <- fluidPage(
       h2("Choose the categorical subset of the data:"),
       radioButtons("hhl_seasons",
                    "Seasons",
-                   choiceValues = c( 
+                   choiceValues = c( "All",
                                     "Summer",
                                     "Autumn",
                                     "Spring",
                                     "Winter"
                    ),
-                   choiceNames = c(
+                   choiceNames = c("All",
                                    "Summer",
                                    "Autumn",
                                    "Spring",
@@ -67,7 +92,7 @@ ui <- fluidPage(
       ),
       radioButtons("schl_holi",
                    "Holiday",
-                   choiceValues = c( 
+                   choiceValues = c(
                                     "Holiday",
                                     "No Holiday"
                    ),
@@ -85,21 +110,9 @@ ui <- fluidPage(
       imageOutput("bike")),
       tabPanel("Data Download",
                DT::dataTableOutput("mytable"),downloadButton("downloadData", "Download")),
-      tabPanel("Data Exploration",plotOutput("corr_scatter"),
-               actionButton("corr_sample","Get a Sample!")),
-      conditionalPanel("input.corr_sample",
-                       h2("Guess the correlation!"),
-                       column(6, 
-                              numericInput("corr_guess",
-                                           "",
-                                           value = 0,
-                                           min = -1, 
-                                           max = 1
-                              )
-                       ),
-                       column(6, 
-                              actionButton("corr_submit", "Subset"))
-      )
+      tabPanel("Data Exploration",
+               
+               actionButton("start_subset","Subset"))
     )
   )
   )
@@ -130,25 +143,7 @@ server <- function(input, output, session) {
          contentType = 'image/png',
          alt = "")
   }, deleteFile = FALSE)
-  
-  
-  output$mytable <- DT::renderDataTable({
-    DT::datatable(my_sample|>
-                    select(input$corr_y, input$corr_x, names(categorical_my_sample))|>
-                    filter(Holiday == input$schl_holi, Seasons == input$hhl_seasons,
-                           `Functioning Day` == input$fs_func))
-  })
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      paste("bike", ".csv", sep = "")
-    },
-    content = function(file) {
-      write.csv(my_sample|>
-                  select(input$corr_y, input$corr_x, names(categorical_my_sample))|>
-                  filter(Holiday == input$schl_holi, Seasons == input$hhl_seasons,
-                         `Functioning Day` == input$fs_func), file, row.names = FALSE)
-    }
-  )
+
   
   observe({
     updateSliderInput(session, "bins", max = max(numeric_my_sample|>select(input$corr_x)),
@@ -161,80 +156,47 @@ server <- function(input, output, session) {
                       value = c(min(numeric_my_sample|>select(input$corr_y)),max(numeric_my_sample|>select(input$corr_y))))
   })
   
+  data<-reactiveValues(a=NULL)
   
-  
-  
-  
-  #################################################3
-  ##Correlation tab
-  sample_corr <- reactiveValues(corr_data = NULL, corr_truth = NULL)
-  
-  #update input boxes so they can't choose the same variable
-  observeEvent(c(input$corr_x, input$corr_y), {
-    corr_x <- input$corr_x
-    corr_y <- input$corr_y
-    choices <- numeric_vars
-    if (corr_x == corr_y){
-      choices <- choices[-which(choices == corr_x)]
-      updateSelectizeInput(session,
-                           "corr_y",
-                           choices = choices)
+  observeEvent(input$start_subset, {
+    if(input$hhl_seasons == "All"){
+      seasons_sub <- Seasonsvals
+    } else if(input$hhl_seasons == "Summer"){
+      seasons_sub <- Seasonsvals["1"]
+    } else if(input$hhl_seasons == "Autumn"){
+      seasons_sub <- Seasonsvals["2"]
+    } else if(input$hhl_seasons == "Winter"){
+      seasons_sub <- Seasonsvals["3"]
+    }else {
+      seasons_sub <- Seasonsvals["4"]
     }
+    subset<-my_sample|>
+      select(input$corr_y, input$corr_x, names(categorical_my_sample))|>
+      filter(Holiday == input$schl_holi, Seasons %in% seasons_sub,
+             `Functioning Day` == input$fs_func)
+    
+    data$a<-subset
   })
   
-  #make sure two variables are selected
-  observeEvent(input$corr_sample, {
+  
+  output$mytable <- DT::renderDataTable({
+    DT::datatable(data$a)
+  })
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste("bike", ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(data$a, file, row.names = FALSE)
+    }
+  )
 
-    corr_vars <- c(input$corr_x, input$corr_y)
-    
-    subsetted_data <- my_sample |>
-      filter(#cat vars first
-        Seasons %in% input$hhl_seasons,
-        `Functioning Day` %in% input$fs_func,
-        Holiday %in% input$schl_holi
-      ) 
-    
-    sample_corr$corr_data <- subsetted_data
-    sample_corr$corr_truth <- cor(sample_corr$corr_data |>
-                                    select(corr_vars))[1,2]
-  })
-  
-  
-  
-  #Code for rendering the regression plot. It changes whether a line is requested
-  #or not
-  output$corr_scatter <- renderPlot({
-    validate(
-      need(!is.null(sample_corr$corr_data), "")
-    )
-    ggplot(sample_corr$corr_data, aes_string(x = isolate(input$corr_x), y = isolate(input$corr_y))) +
-      geom_point()
-  })
-  
-  
-  
-  #Code for the correlation guessing game
-  observeEvent(input$corr_submit, {
-    close <- abs(input$corr_guess - sample_corr$corr_truth) <= .05
-    if(close){
-      shinyalert(title = "Nicely done!",
-                 paste0("The sample correlation is ",
-                        round(sample_corr$corr_truth, 4),
-                        "."),
-                 type = "success"
-      )
-    } else {
-      if(input$corr_guess > sample_corr$corr_truth){
-        shinyalert(title = "Try again!",
-                   "Try guessing a lower value.")
-      } else {
-        shinyalert(title = "Try again!",
-                   "Try guessing a higher value.")
-      }
-    }
-  })
 }
 
 # Run the application 
 shinyApp(ui = ui, server = server)
 
+
+
+extra<-my_sample|>
+  filter(Seasons == "Summer")
