@@ -6,7 +6,7 @@ library(shiny)
 library(shinyalert)
 library(DT)
 
-my_sample_initial<-read_csv("Seoul_Bike_Data.csv")
+my_sample<-read_csv("Seoul_Bike_Data.csv")
 my_sample<-my_sample_initial|>
   mutate(month=str_split_i(Date,'/',2),
          month=as.numeric(month),day=str_split_i(Date,'/',1),
@@ -32,7 +32,7 @@ Seasonsvals <- c(
 
 Holidayvals<-c("1"="No Holiday", '0'="Holiday")
 
-Funcvals<-c("1" = "Yes", "2" = "No")
+Funcvals<-c("1" = "Yes", "0" = "No")
 
 
 
@@ -52,16 +52,16 @@ ui <- fluidPage(
     sidebarPanel(
       h2("Choose the numeric subsets of the data:"),
       selectizeInput("corr_x",
-                     "x Variable",
+                     "X Variable",
                      choices = names(numeric_my_sample)[-1], 
                      selected = names(numeric_my_sample)[2]),
-      sliderInput("bins", "Number of bins:",
+      sliderInput("bins", "Range of x",
                   min = 1, max = 50, value = c(1,2)),
       selectizeInput("corr_y",
-                     "y Variable",
+                     "Y Variable",
                      choices = names(numeric_my_sample)[-2],
                      selected = names(numeric_my_sample)[1]),
-      sliderInput("bins2", "Number of bins:",
+      sliderInput("bins2", "Range of y",
                   min = 1, max = 50, value = c(1,2)),
       h2("Choose the categorical subset of the data:"),
       radioButtons("hhl_seasons",
@@ -81,26 +81,27 @@ ui <- fluidPage(
       ),
       radioButtons("fs_func",
                    "Functioning",
-                   choiceValues = c( 
+                   choiceValues = c( "All",
                                     "Yes",
                                     "No"
                    ),
-                   choiceNames = c(
+                   choiceNames = c("All",
                                    "Yes",
                                    "No"
                    )
       ),
       radioButtons("schl_holi",
                    "Holiday",
-                   choiceValues = c(
+                   choiceValues = c("All",
                                     "Holiday",
                                     "No Holiday"
                    ),
-                   choiceNames = c(
+                   choiceNames = c("All",
                                    "Yes",
                                    "No"
                    )
       ),
+      actionButton("start_subset","Subset"),
     ),
     mainPanel(
       tabsetPanel(id="tabs",
@@ -111,8 +112,7 @@ ui <- fluidPage(
       tabPanel("Data Download",
                DT::dataTableOutput("mytable"),downloadButton("downloadData", "Download")),
       tabPanel("Data Exploration",
-               
-               actionButton("start_subset","Subset"))
+               plotOutput("corr_scatter"))
     )
   )
   )
@@ -170,10 +170,25 @@ server <- function(input, output, session) {
     }else {
       seasons_sub <- Seasonsvals["4"]
     }
+    if(input$fs_func == "All"){
+      func_sub <- Funcvals
+    } else if(input$fs_func == "Yes"){
+      func_sub <- Funcvals["1"]
+    } else {
+      func_sub <- Funcvals["0"]
+    }
+    if(input$schl_holi == "All"){
+      hol_sub <- Holidayvals
+    } else if(input$schl_holi == "Yes"){
+      hol_sub <- Holidayvals["1"]
+    } else {
+      hol_sub <- Holidayvals["0"]
+    }
+
     subset<-my_sample|>
       select(input$corr_y, input$corr_x, names(categorical_my_sample))|>
-      filter(Holiday == input$schl_holi, Seasons %in% seasons_sub,
-             `Functioning Day` == input$fs_func)
+      filter(Holiday %in% hol_sub, Seasons %in% seasons_sub,
+             `Functioning Day` %in% func_sub)
     
     data$a<-subset
   })
@@ -191,12 +206,13 @@ server <- function(input, output, session) {
     }
   )
 
+  output$corr_scatter<-renderPlot({
+    ggplot(data$a, aes_string(x = isolate(input$corr_x), y = isolate(input$corr_y))) +
+      geom_point()
+  })
+  
+  
 }
 
 # Run the application 
 shinyApp(ui = ui, server = server)
-
-
-
-extra<-my_sample|>
-  filter(Seasons == "Summer")
