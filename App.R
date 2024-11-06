@@ -1,3 +1,12 @@
+###
+# title: "558 Project 2"
+# author: "Madelyn Garrison"
+# format: html
+# editor: visual
+###
+
+# Load required packages 
+
 library(tidyverse)
 library(ggpointdensity)
 library(ggupset)
@@ -5,6 +14,11 @@ library(ggcorrplot)
 library(shiny)
 library(shinyalert)
 library(DT)
+library(plotly)
+library(shinycssloaders)
+
+# Read in data and clean
+# Renaming to eliminate characters R shiny can't handle
 
 my_sample<-read_csv("Seoul_Bike_Data.csv")
 my_sample<-my_sample|>
@@ -20,147 +34,157 @@ my_sample<-my_sample|>
          "Visability" = `Visibility (10m)`, "Dew_point_temperature" = `Dew point temperature(°C)`,
          "Solar_radiation" = `Solar Radiation (MJ/m2)`)
 
+# All numeric variables and their correlations + all categorical correlations
+
 numeric_my_sample<-my_sample|>
   select(Rented_Bike_Count, Temperature, Humidity, Wind_speed, Visability,
          Dew_point_temperature, Solar_radiation, Rainfall, Snowfall)
+
+corr<-cor(numeric_my_sample)
+
 categorical_my_sample<-my_sample|>
   select(Hour, Seasons, Holiday)
-# Read in data
 
-Seasonsvals <- c(
-  "1" = "Summer",
-  "2" = "Autumn",
-  "3" = "Winter",
-  "4" = "Spring")
+# Formats for categorical variables
+
+Seasonsvals <- c("1" = "Summer", "2" = "Autumn", "3" = "Winter", "4" = "Spring")
 
 Holidayvals<-c("1"="No Holiday", '0'="Holiday")
 
 Hourvals<-c('0',"1","2","3","4","5","6","7","8","9","10","11","12","13","14",
             "15", "16", "17", "18", "19", "20", "21", "22", "23")
 
+## User Interface
+
 ui <- fluidPage(
-  
   titlePanel("Seoul Bike Sharing Exploration"),
   sidebarLayout(
     sidebarPanel(
-      h2("Choose the numeric subsets of the data:"),
-      selectizeInput("x",
-                     "X Variable",
+      h2("Choose the numeric subsets of the data:"), 
+      # A widget with selections to choose a numeric variable and the corresponding ranges
+      selectizeInput("x", "X Variable",
                      choices = names(numeric_my_sample)[-1], 
                      selected = names(numeric_my_sample)[2]),
       sliderInput("bins", "Range of x",
                   min = 1, max = 50, value = c(1,2)),
-      selectizeInput("y",
-                     "Y Variable",
+      # Repeat for a second numeric variable
+      selectizeInput("y", "Y Variable",
                      choices = names(numeric_my_sample)[-2],
                      selected = names(numeric_my_sample)[1]),
       sliderInput("bins2", "Range of y",
                   min = 1, max = 50, value = c(1,2)),
       h2("Choose the categorical subset of the data:"),
+      # Choose a subset for the three categorical variables
       radioButtons("seasons",
                    "Seasons",
-                   choiceValues = c( "All",
+                    choiceValues = c( "All",
+                                      "Summer",
+                                      "Autumn",
+                                      "Spring",
+                                      "Winter"
+                    ),
+                    choiceNames = c("All",
                                     "Summer",
                                     "Autumn",
                                     "Spring",
                                     "Winter"
-                   ),
-                   choiceNames = c("All",
-                                   "Summer",
-                                   "Autumn",
-                                   "Spring",
-                                   "Winter"
-                   )
+                    )
       ),
       selectizeInput("hour",
                      "Hour",
-                     choices = c("All", 0:23),
-                     selected = 0),
+                      choices = c("All", 0:23),
+                      selected = 0),
       radioButtons("holi",
                    "Holiday",
-                   choiceValues = c("All",
+                    choiceValues = c("All",
                                     "Holiday",
                                     "No Holiday"
-                   ),
-                   choiceNames = c("All",
+                    ),
+                    choiceNames = c("All",
                                    "Yes",
                                    "No"
-                   )
+                    )
       ),
+      # Button to subset the data
       actionButton("start_subset","Subset"),
     ),
     mainPanel(
       tabsetPanel(id="tabs",
-      tabPanel("About",textOutput("about"),
-      uiOutput("url"),
-      textOutput("about2"),
-      imageOutput("bike")),
-      tabPanel("Data Download",
-               DT::dataTableOutput("mytable"),downloadButton("downloadData", "Download")),
-      tabPanel("Data Exploration",
-               radioButtons("Facet_wrap",
-                            "Facet_wrap",
-                            choiceValues = c("Hour",
-                                             "Holiday",
-                                             "Seasons"
-                            ),
-                            choiceNames = c("Hour",
-                                            "Holiday",
-                                            "Seasons"
-                            )
-               )
-               ,
-               radioButtons("Color",
-                            "Color",
-                            choiceValues = c("Hour",
-                                             "Holiday",
-                                             "Seasons"
-                            ),
-                            choiceNames = c("Hour",
-                                            "Holiday",
-                                            "Seasons"
-                            )
-               ),
-               plotOutput("corr_scatter"),
-               plotOutput("x_hist"),
-               plotOutput("y_hist"),
-               plotOutput("density"),
-               checkboxGroupInput("num_var",
-                            "Choose numeric variable",
-                            choiceValues = c(
-                                             "1",
-                                             "2"
-                            ),
-                            choiceNames = c(
-                                            "X variable",
-                                            "Y variable"
-                            )
-               ),
-               radioButtons("Function",
-                            "Choose function",
-                            choiceValues = c("mean",
-                                             "median",
-                                             "sd"
-                            ),
-                            choiceNames = c("Mean",
-                                            "Median",
-                                            "Standard Deviation"
-                            )
-               ),
-               tableOutput("x_table"),
-               checkboxGroupInput("cats", "Choose categorical variable(s)",
-                                  choiceValues = c("1", "2", "3"),
-                                  choiceNames = c("Hour", "Seasons", "Holiday")),
-               tableOutput("y_table")
-               )
+        # First tab is the about section for the app and the data set
+        tabPanel("About",textOutput("about"),
+          uiOutput("url"),
+          textOutput("about2"),
+          imageOutput("bike")),
+        # Second tab is to display the subsetted data set and allow for it to be downloaded
+        tabPanel("Data Download",
+          DT::dataTableOutput("mytable"),downloadButton("downloadData", "Download")),
+        # Third tab creates visuals and summaries
+        # Additional widgets for graph aesthetics and specifying numeric summaries
+        tabPanel("Data Exploration",
+          radioButtons("Facet_wrap",
+                        "Panel",
+                        choiceValues = c("Seasons",
+                                          "Holiday",
+                                          "Hour"
+                        ),
+                        choiceNames = c("Seasons",
+                                        "Holiday",
+                                        "Hour"
+                        )
+          ),
+          radioButtons("Color",
+                        "Color",
+                        choiceValues = c("Hour",
+                                          "Holiday",
+                                          "Seasons"
+                        ),
+                        choiceNames = c("Hour",
+                                        "Holiday",
+                                        "Seasons"
+                        )
+          ),
+          shinycssloaders::withSpinner(plotOutput("corr_scatter")),
+          plotOutput("x_hist"),
+          plotOutput("y_hist"),
+          plotOutput("density"),
+          checkboxGroupInput("num_var",
+                              "Choose numeric variable",
+                              choiceValues = c("1",
+                                                "2"
+                              ),
+                              choiceNames = c("X variable",
+                                              "Y variable"
+                              )
+          ),
+          radioButtons("Function",
+                        "Choose function",
+                        choiceValues = c("mean",
+                                          "median",
+                                          "sd"
+                        ),
+                        choiceNames = c("Mean",
+                                        "Median",
+                                        "Standard Deviation"
+                        )
+          ),
+          tableOutput("x_table"),
+          checkboxGroupInput("cats", "Choose categorical variable(s)",
+                              choiceValues = c("1", "2", "3"),
+                              choiceNames = c("Hour", "Seasons", "Holiday")),
+          tableOutput("y_table"),
+          plotOutput("Corr")
+        )
+      )
     )
-  )
   )
 )
 
+## Server
 
-# Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
+  # Output for the About tab
+  
   output$about <- renderText({
     "This app was created to explore the Seoul Bike Sharing Demand Prediction data set. The data, from Kaggle,
     was collected in order to try to predict how weather affects the number of bikes used by a bike sharing 
@@ -168,37 +192,52 @@ server <- function(input, output, session) {
     particular hour on a particular day and information on the weather at the time and other circumstances. The 
     link to the source of the data is below."
   })
-
+  
+    # Creates hyperlink to data set source
+  
   output$url<-renderUI({
-    tagList("",a("Seoul Bike Sharing Data", href="https://www.kaggle.com/datasets/saurabhshahane/seoul-bike-sharing-demand-prediction/data") )
+    tagList("",a("Seoul Bike Sharing Data", 
+            href="https://www.kaggle.com/datasets/saurabhshahane/seoul-bike-sharing-demand-prediction/data") )
   })
+  
   output$about2 <- renderText({
     "In this app, a user can explore associations between numeric variables, subset the data by categorical
     and numeric variables, and download the subsetted data."
   })
+  
+    # Embeds image 
+  
   output$bike<-renderImage({ 
     filename <- normalizePath(file.path('./images','Bike.png'))
-    
     list(src = filename,
          contentType = 'image/png',
          alt = "")
   }, deleteFile = FALSE)
 
+  # Update numeric variable sliders, using the minimum and maximum of the selected variable
   
   observe({
     updateSliderInput(session, "bins", max = max(numeric_my_sample|>select(input$x)),
                       min = min(numeric_my_sample|>select(input$x)),
                       value = c(min(numeric_my_sample|>select(input$x)),max(numeric_my_sample|>select(input$x))))
   })
+  
   observe({
     updateSliderInput(session, "bins2", max = max(numeric_my_sample|>select(input$y)),
                       min = min(numeric_my_sample|>select(input$y)),
                       value = c(min(numeric_my_sample|>select(input$y)),max(numeric_my_sample|>select(input$y))))
   })
   
+  # Subset the data based on the user-selected variables and apply needed alterations
+  
   data<-reactiveValues(a=NULL, num=NULL, cat=NULL)
   
   observeEvent(input$start_subset, {
+    
+    if (input$x == input$y){
+      shinyalert(title = "Numeric variables must be different.", type = "error")
+    } else {}
+    
     if(input$seasons == "All"){
       seasons_sub <- Seasonsvals
     } else if(input$seasons == "Summer"){
@@ -210,11 +249,13 @@ server <- function(input, output, session) {
     }else {
       seasons_sub <- Seasonsvals["4"]
     }
+    
     if(input$hour == "All"){
       hour_sub <- Hourvals
     } else {
       hour_sub <- input$hour
     }
+    
     if(input$holi == "All"){
       hol_sub <- Holidayvals
     } else if(input$holi == "Yes"){
@@ -248,24 +289,27 @@ server <- function(input, output, session) {
       {if("Rainfall" %in% input$y) filter(.,Rainfall >= input$bins2[1] & Rainfall <= input$bins2[2]) else .} %>%
       {if("Snowfall" %in% input$y) filter(.,Snowfall >= input$bins2[1] & Snowfall <= input$bins2[2]) else .}
     
+      # Complete subsetted data + divided by data type
     
-    data$a<-subset
+      data$a<-subset
     
-    subset_num<-subset|>
-      select(input$x, input$y)
+      subset_num<-subset|>
+        select(input$x, input$y)
     
-    data$num<-subset_num
+      data$num<-subset_num
     
-    subset_cat<-subset|>
-      select(names(categorical_my_sample))
+      subset_cat<-subset|>
+        select(names(categorical_my_sample))
     
-    data$cat<-subset_cat
-  })
+      data$cat<-subset_cat
+    })
   
+  # Output for the Data Download tab
   
   output$mytable <- DT::renderDataTable({
     DT::datatable(data$a)
   })
+  
   output$downloadData <- downloadHandler(
     filename = function() {
       paste("bike", ".csv", sep = "")
@@ -274,6 +318,16 @@ server <- function(input, output, session) {
       write.csv(data$a, file, row.names = FALSE)
     }
   )
+  
+  # Output for Data Exploration tab
+  
+  observeEvent(c(input$submit_Facet_wrap,input$Color), {
+    fw<-input$Facet_wrap
+    co<-input$Color
+    if(fw == co){
+      shinyalert(title = "Grouping variables must be different.", type = "error")
+      } else {}
+  })
 
   output$corr_scatter<-renderPlot({
     validate(
@@ -283,32 +337,40 @@ server <- function(input, output, session) {
       geom_point(aes(color = get(input$Color)))+
       facet_wrap(~get(input$Facet_wrap))
   })
+  
   output$x_hist<-renderPlot({
     validate(
-      need(!is.null(data$a), "Remember to subset first")
+      need(!is.null(data$a), " ")
     )
     ggplot(data$a, aes_string(x = isolate(input$x))) +
       geom_histogram()
   })
+  
   output$y_hist<-renderPlot({
     validate(
-      need(!is.null(data$a), "Remember to subset first")
+      need(!is.null(data$a), " ")
     )
     ggplot(data$a, aes_string(x = isolate(input$y))) +
       geom_histogram()
   })
+  
   output$density<-renderPlot({
     validate(
-      need(!is.null(data$a), "Remember to subset first")
+      need(!is.null(data$a), " ")
     )
     ggplot(data$a, aes_string(x = isolate(input$x), y = isolate(input$y))) +
       geom_pointdensity()
   })
   
-  output$x_table<-renderTable(apply(data$num|>select(as.numeric(input$num_var)), 2, input$Function))
+  output$x_table<-renderTable(apply(data$a|>select(as.numeric(input$num_var)), 2, input$Function))
+
   output$y_table<-renderTable(apply(data$cat|>select(as.numeric(input$cats)), 2, table))
 
+  output$Corr<-renderPlot({
+    ggcorrplot(corr, type = "lower", title = "General Correlation")
+  })
 }
 
-# Run the application 
+## Run the application 
+
 shinyApp(ui = ui, server = server)
