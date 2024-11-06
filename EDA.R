@@ -228,15 +228,3 @@ ggplot(data = my_sample, mapping = aes(x = `Wind speed (m/s)`, y = `Rented Bike 
   geom_pointdensity()
 ggplot(data = my_sample, mapping = aes(x = `Dew point temperature(°C)`, y = `Rented Bike Count`)) +
   geom_pointdensity()
-
-
-
-
-
-
-
-
-
-
-
-
