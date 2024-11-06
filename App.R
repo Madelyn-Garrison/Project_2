@@ -124,7 +124,34 @@ ui <- fluidPage(
                plotOutput("corr_scatter"),
                plotOutput("x_hist"),
                plotOutput("y_hist"),
-               plotOutput("scatter_total")
+               plotOutput("density"),
+               checkboxGroupInput("num_var",
+                            "Choose numeric variable",
+                            choiceValues = c(
+                                             "1",
+                                             "2"
+                            ),
+                            choiceNames = c(
+                                            "X variable",
+                                            "Y variable"
+                            )
+               ),
+               radioButtons("Function",
+                            "Choose function",
+                            choiceValues = c("mean",
+                                             "median",
+                                             "sd"
+                            ),
+                            choiceNames = c("Mean",
+                                            "Median",
+                                            "Standard Deviation"
+                            )
+               ),
+               tableOutput("x_table"),
+               checkboxGroupInput("cats", "Choose categorical variable(s)",
+                                  choiceValues = c("1", "2", "3"),
+                                  choiceNames = c("Hour", "Seasons", "Holiday")),
+               tableOutput("y_table")
                )
     )
   )
@@ -169,7 +196,7 @@ server <- function(input, output, session) {
                       value = c(min(numeric_my_sample|>select(input$y)),max(numeric_my_sample|>select(input$y))))
   })
   
-  data<-reactiveValues(a=NULL)
+  data<-reactiveValues(a=NULL, num=NULL, cat=NULL)
   
   observeEvent(input$start_subset, {
     if(input$seasons == "All"){
@@ -196,11 +223,43 @@ server <- function(input, output, session) {
       hol_sub <- Holidayvals["0"]
     }
 
+    vars<-c(input$x, input$y)
+    
     subset<-my_sample|>
-      select(input$y, input$x, names(categorical_my_sample))|>
-      filter(Holiday %in% hol_sub, Seasons %in% seasons_sub, Hour %in% hour_sub)
+      select(input$x, input$y, names(categorical_my_sample))|>
+      filter(Holiday %in% hol_sub, Seasons %in% seasons_sub, Hour %in% hour_sub)|>
+      mutate(Hour = as.character(Hour))%>%
+      {if("Temperature" %in% input$x) filter (.,Temperature >= input$bins[1] & Temperature <= input$bins[2]) else .} %>%
+      {if("Rented_Bike_Count" %in% input$x) filter(.,Rented_Bike_Count >= input$bins[1] & Rented_Bike_Count <= input$bins[2]) else .} %>%
+      {if("Humidity" %in% input$x) filter(.,Humidity >= input$bins[1] & Humidity <= input$bins[2]) else .} %>%
+      {if("Wind_speed" %in% input$x) filter(.,Wind_speed >= input$bins[1] & Wind_speed <= input$bins[2]) else .} %>%
+      {if("Visability" %in% input$x) filter(.,Visability >= input$bins[1] & Visability <= input$bins[2]) else .} %>%
+      {if("Dew_point_temperature" %in% input$x) filter(.,Dew_point_temperature >= input$bins[1] & Dew_point_temperature <= input$bins[2]) else .} %>%
+      {if("Solar_radiation" %in% input$x) filter(.,Solar_radiation >= input$bins[1] & Solar_radiation <= input$bins[2]) else .} %>%
+      {if("Rainfall" %in% input$x) filter(.,Rainfall >= input$bins[1] & Rainfall <= input$bins[2]) else .} %>%
+      {if("Snowfall" %in% input$x) filter(.,Snowfall >= input$bins[1] & Snowfall <= input$bins[2]) else .} %>%
+      {if("Temperature" %in% input$y) filter (.,Temperature >= input$bins2[1] & Temperature <= input$bins2[2]) else .} %>%
+      {if("Rented_Bike_Count" %in% input$y) filter(.,Rented_Bike_Count >= input$bins2[1] & Rented_Bike_Count <= input$bins2[2]) else .} %>%
+      {if("Humidity" %in% input$y) filter(.,Humidity >= input$bins2[1] & Humidity <= input$bins2[2]) else .} %>%
+      {if("Wind_speed" %in% input$y) filter(.,Wind_speed >= input$bins2[1] & Wind_speed <= input$bins2[2]) else .} %>%
+      {if("Visability" %in% input$y) filter(.,Visability >= input$bins2[1] & Visability <= input$bins2[2]) else .} %>%
+      {if("Dew_point_temperature" %in% input$y) filter(.,Dew_point_temperature >= input$bins2[1] & Dew_point_temperature <= input$bins2[2]) else .} %>%
+      {if("Solar_radiation" %in% input$y) filter(.,Solar_radiation >= input$bins2[1] & Solar_radiation <= input$bins2[2]) else .} %>%
+      {if("Rainfall" %in% input$y) filter(.,Rainfall >= input$bins2[1] & Rainfall <= input$bins2[2]) else .} %>%
+      {if("Snowfall" %in% input$y) filter(.,Snowfall >= input$bins2[1] & Snowfall <= input$bins2[2]) else .}
+    
     
     data$a<-subset
+    
+    subset_num<-subset|>
+      select(input$x, input$y)
+    
+    data$num<-subset_num
+    
+    subset_cat<-subset|>
+      select(names(categorical_my_sample))
+    
+    data$cat<-subset_cat
   })
   
   
@@ -217,22 +276,37 @@ server <- function(input, output, session) {
   )
 
   output$corr_scatter<-renderPlot({
+    validate(
+      need(!is.null(data$a), "Remember to subset first")
+    )
     ggplot(data$a, aes_string(x = isolate(input$x), y = isolate(input$y))) +
       geom_point(aes(color = get(input$Color)))+
       facet_wrap(~get(input$Facet_wrap))
   })
   output$x_hist<-renderPlot({
+    validate(
+      need(!is.null(data$a), "Remember to subset first")
+    )
     ggplot(data$a, aes_string(x = isolate(input$x))) +
       geom_histogram()
   })
   output$y_hist<-renderPlot({
+    validate(
+      need(!is.null(data$a), "Remember to subset first")
+    )
     ggplot(data$a, aes_string(x = isolate(input$y))) +
       geom_histogram()
   })
-  output$scatter_total<-renderPlot({
+  output$density<-renderPlot({
+    validate(
+      need(!is.null(data$a), "Remember to subset first")
+    )
     ggplot(data$a, aes_string(x = isolate(input$x), y = isolate(input$y))) +
-      geom_point()
+      geom_pointdensity()
   })
+  
+  output$x_table<-renderTable(apply(data$num|>select(as.numeric(input$num_var)), 2, input$Function))
+  output$y_table<-renderTable(apply(data$cat|>select(as.numeric(input$cats)), 2, table))
 
 }
 
